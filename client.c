@@ -46,6 +46,16 @@ void LoadMapTextures(SDL_Renderer *renderer){
         printf("Did not create CaslteTile texture: %s\n", SDL_GetError());
     }
     printf("Loaded Castle tile\n");
+    Surface = SDL_LoadBMP("assets/PlatoonTile.bmp");
+    if (!Surface) {
+        printf("Could not load PlatoonTile img: %s\n", SDL_GetError());
+        return;
+    }
+    tileTextures[2] = SDL_CreateTextureFromSurface(renderer, Surface);
+    if(!tileTextures[2]){
+        printf("Did not create PlatoonTile texture: %s\n", SDL_GetError());
+    }
+    printf("Loaded Platoon tile\n");
     SDL_DestroySurface(Surface);
 }
 
@@ -67,6 +77,24 @@ void DrawTileMap(struct GameState *gameState, SDL_Renderer *renderer){
             break;
         }
         i++;
+    }
+}
+
+void DrawUnits(struct GameState *gameState, SDL_Renderer *renderer){
+    for (int i=0;i<195;i++){
+        if(gameState->unitMap.tileType[i] == 2){
+
+            float TileY = i/gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxY;
+            float TileX = i%gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxX;
+
+            tileRect.x = TileX;
+            tileRect.y = TileY;
+
+            if(!SDL_RenderTexture(renderer, tileTextures[2], NULL, &tileRect)){
+                printf("%s\n", SDL_GetError());
+                break;
+            }
+        }
     }
 }
 
@@ -162,6 +190,7 @@ int main(int argc, char *argv[]) {
             SDL_RenderClear(renderer);
 
             DrawTileMap(&gameState, renderer);
+            DrawUnits(&gameState, renderer);
 
             SDL_RenderPresent(renderer);
         }

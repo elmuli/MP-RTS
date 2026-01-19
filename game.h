@@ -20,12 +20,21 @@ struct TileMap {
   uint32_t tileType[195];
 };
 
+struct Unit{
+    uint32_t posOnGrid;
+    uint8_t unitType;
+    uint16_t health;
+    uint16_t damage;
+};
+
 struct __attribute__((packed))GameState{
     uint8_t BG_red;
     uint8_t BG_blue;
     struct TileMap tileMap;
+    struct TileMap unitMap;
     uint8_t isReady;
     uint8_t waitForServer;
+    struct Unit units[3];
 };
 
 #pragma pack(pop)
