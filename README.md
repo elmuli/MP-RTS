@@ -1,1 +1,1 @@
-# Simple multiplayer RTS game
+# Simple multiplayer Strategy Game
