@@ -108,7 +108,7 @@ int SelectUnit(struct GameState *gameState){
             {
                 for (int k=0;k<3;k++){
                     if(gameState->units[k].posOnGrid == i){
-                        gameState->selectedUnit = *gameState->units[k];
+                        gameState->selectedUnit = &gameState->units[k];
                         return 1;
                     }
                 }
@@ -119,12 +119,18 @@ int SelectUnit(struct GameState *gameState){
 }
 
 int MoveUnit(struct GameState *gameState){
-    int mouseX, mouseY;
+    if (gameState->selectedUnit == nullptr) {
+    }
+    float mouseX, mouseY;
     SDL_GetMouseState(&mouseX, &mouseY);
-    int tileX = mouseX / gameState->tileMap.tilePxX;
+    //int tileX = mouseX / gameState->tileMap.tilePxX;
     int tileY = mouseY / gameState->tileMap.tilePxY;
 
-    int newIndex = TileY * gameState->tileMap.tilesAcross + gameState->tileMap.tilePxX;
+    int newIndex = tileY * gameState->tileMap.tilesAcross + gameState->tileMap.tilePxX;
+    gameState->unitMap.tileType[gameState->selectedUnit->posOnGrid] = 0;
+    gameState->unitMap.tileType[newIndex] = gameState->selectedUnit->unitType;
+    gameState->selectedUnit->posOnGrid = newIndex;
+    return 1;
 }
 
 void GetPlayerInput(SDL_Event *event, struct GameState *gameState, const bool *keys){
@@ -216,8 +222,14 @@ int main(int argc, char *argv[]) {
         else {
 
             if (SDL_PollEvent(&windowEvent)) {
-                if (SDL_EVENT_QUIT == windowEvent.type) {
-                    break;
+                switch (windowEvent.type) {
+                    case SDL_EVENT_QUIT:
+                        isRunning = 0;
+                        break;
+                    case SDL_EVENT_MOUSE_BUTTON_UP:
+                        if (!SelectUnit(&gameState)) {
+                            MoveUnit(&gameState);
+                        }
                 }
             }
 
