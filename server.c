@@ -57,7 +57,7 @@ void CreateUnitMap(struct GameState *gameState){
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -67,9 +67,15 @@ void CreateUnitMap(struct GameState *gameState){
 
     int counter = 0;
     for (int i=0; i<195; i++){
-        if (counter < 3){
+        if (counter < UNIT_COUNT){
             if (grid[i] == 2){
                 gameState->units[counter].posOnGrid = i;
+                gameState->units[counter].unitType = 2;
+                if(counter%2 == 0){
+                    gameState->units[counter].ownerID = 2;
+                }else{
+                    gameState->units[counter].ownerID = 1;
+                }
                 counter++;
             }
         }else {
@@ -89,6 +95,24 @@ void SetUpGameState(struct GameState *gameState){
     CreateUnitMap(gameState);
 }
 
+int GetClientGameStateUpdate(int client, struct GameState *gameState){
+
+    struct gamestate gamestatebuf;
+    printf("wait for client %i\n", client);
+
+    ssize_t bytes = 0;
+    uint8_t *p = (uint8_t*)&gamestatebuf;
+
+    while (bytes < sizeof(gamestatebuf)) {
+        ssize_t r = recv(client, p + bytes, sizeof(gamestatebuf) - bytes, 0);
+        if (r <= 0) break;
+        bytes += r;
+    }
+
+    
+
+}
+
 int main(){
 
     struct GameState gameState;
@@ -100,7 +124,7 @@ int main(){
 
     socklen_t addrlen_1;
     socklen_t addrlen_2;
-    struct sockaddr_in srv, cli_1, cli_2;
+    struct sockaddr_in srv;
 
     addrlen_1 = 0;
     addrlen_2 = 0;
@@ -135,12 +159,15 @@ int main(){
 
     printf("Listening for clients on: %d\n", PORT);
 
+    uint8_t clientID = 1;
+
     clients[0] = accept(server, (struct sockaddr *)&srv, &addrlen_1);
     if(clients[0] < 0){
         printf("accept() 1\n");
         close(server);
         return -1;
     }
+    send(clients[0], &clientID, sizeof(clientID), 0);
     send(clients[0], &gameState, sizeof(gameState), 0);
 
     printf("Client 1 connected\n");
@@ -153,6 +180,8 @@ int main(){
         close(server);
         return -1;
     }
+    clientID = 2;
+    send(clients[1], &clientID, sizeof(clientID), 0);
     send(clients[1], &gameState, sizeof(gameState), 0);
 
     printf("Client 2 connected\n");

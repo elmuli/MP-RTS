@@ -14,7 +14,11 @@
 
 struct GameState gameState;
 
-SDL_Texture *tileTextures[3];
+uint8_t ClientID;
+Command commands[10];
+int commandCount;
+
+SDL_Texture *tileTextures[4];
 SDL_FRect tileRect;
 
 
@@ -29,6 +33,7 @@ void LoadMapTextures(SDL_Renderer *renderer){
         printf("Did not create GrassTile texture: %s\n", SDL_GetError());
     }
     printf("Loaded Grass tile\n");
+
     Surface = SDL_LoadBMP("assets/CastleTile.bmp");
     if (!Surface) {
         printf("Could not load CastleTile img: %s\n", SDL_GetError());
@@ -39,6 +44,7 @@ void LoadMapTextures(SDL_Renderer *renderer){
         printf("Did not create CaslteTile texture: %s\n", SDL_GetError());
     }
     printf("Loaded Castle tile\n");
+
     Surface = SDL_LoadBMP("assets/PlatoonTile.bmp");
     if (!Surface) {
         printf("Could not load PlatoonTile img: %s\n", SDL_GetError());
@@ -48,7 +54,19 @@ void LoadMapTextures(SDL_Renderer *renderer){
     if(!tileTextures[2]){
         printf("Did not create PlatoonTile texture: %s\n", SDL_GetError());
     }
-    printf("Loaded Platoon tile\n");
+    printf("Loaded Platoon1 tile\n");
+
+    Surface = SDL_LoadBMP("assets/PlatoonTile2.bmp");
+    if (!Surface) {
+        printf("Could not load PlatoonTile img: %s\n", SDL_GetError());
+        return;
+    }
+    tileTextures[3] = SDL_CreateTextureFromSurface(renderer, Surface);
+    if(!tileTextures[3]){
+        printf("Did not create PlatoonTile2 texture: %s\n", SDL_GetError());
+    }
+    printf("Loaded Platoon2 tile\n");
+
     SDL_DestroySurface(Surface);
 }
 
@@ -74,27 +92,30 @@ void DrawTileMap(struct GameState *gameState, SDL_Renderer *renderer){
 }
 
 void DrawUnits(struct GameState *gameState, SDL_Renderer *renderer){
-    for (int i=0;i<195;i++){
-        if(gameState->unitMap.tileType[i] == 2){
+    for (int i=0;i<UNIT_COUNT;i++){
 
-            float TileY = i/gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxY;
-            float TileX = i%gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxX;
+        float TileY = gameState->units[i].posOnGrid/gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxY;
+        float TileX = gameState->units[i].posOnGrid%gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxX;
 
-            tileRect.x = TileX;
-            tileRect.y = TileY;
+        tileRect.x = TileX;
+        tileRect.y = TileY;
 
-            if(!SDL_RenderTexture(renderer, tileTextures[2], NULL, &tileRect)){
-                printf("%s\n", SDL_GetError());
-                break;
-            }
+        if(!SDL_RenderTexture(renderer, tileTextures[gameState->units[i].ownerID+1], NULL, &tileRect)){
+            printf("%s\n", SDL_GetError());
+            break;
         }
     }
 }
 
-
 int SelectUnit(struct GameState *gameState){
     float mouseX, mouseY;
     SDL_GetMouseState(&mouseX, &mouseY);
+
+    if(mouseX > 600 || mouseY > 400){
+        printf("Clicked out of bounds\n");
+        return 0;
+    }
+
     for (int i=0;i<195;i++){
         if(gameState->unitMap.tileType[i] > 0){
             float tileY = i/gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxY;
@@ -104,30 +125,43 @@ int SelectUnit(struct GameState *gameState){
                 mouseX > tileX 
                 && mouseX < tileX+gameState->tileMap.tilePxX 
                 && mouseY > tileY 
-                && mouseY < tileY+gameState->tileMap.tilePxY)
-            {
-                for (int k=0;k<3;k++){
-                    if(gameState->units[k].posOnGrid == i){
+                && mouseY < tileY+gameState->tileMap.tilePxY
+            ){
+                for (int k=0;k<UNIT_COUNT;k++){
+                    if(gameState->units[k].posOnGrid == i && gameState->units[k].ownerID == ClientID){
                         gameState->selectedUnit = &gameState->units[k];
+                        printf("Selected a unit %i in %i\n", k, i);
                         return 1;
                     }
                 }
             }
         }
     }
+
     return 0;
 }
 
 int MoveUnit(struct GameState *gameState){
+    if(gameState->selectedUnit == NULL){
+        return 0;
+    }
+
     float mouseX, mouseY;
     SDL_GetMouseState(&mouseX, &mouseY);
-    //int tileX = mouseX / gameState->tileMap.tilePxX;
-    int tileY = mouseY / gameState->tileMap.tilePxY;
 
-    int newIndex = tileY * gameState->tileMap.tilesAcross + gameState->tileMap.tilePxX;
+    if(mouseX > 600 || mouseY > 400){
+        printf("Clicked out of bounds\n");
+        return 0;
+    }
+
+    int tileY = mouseY / gameState->tileMap.tilePxY;
+    int tileX = mouseX / gameState->tileMap.tilePxX;
+
+    int newIndex = tileY * gameState->tileMap.tilesAcross + tileX;
     gameState->unitMap.tileType[gameState->selectedUnit->posOnGrid] = 0;
     gameState->unitMap.tileType[newIndex] = gameState->selectedUnit->unitType;
     gameState->selectedUnit->posOnGrid = newIndex;
+    printf("Moved a unit to %i\n", newIndex);
     return 1;
 }
 
@@ -179,6 +213,13 @@ int main(int argc, char *argv[]) {
     }
     printf("Connected to server.\n");
 
+    ssize_t idR = recv(s, &ClientID, sizeof(ClientID), 0);
+    if(idR < 0){
+        printf("Didn't recieve ClientID\n");
+        close(s);
+        return -1;
+    }
+    printf("ClientID recieved %i\n", ClientID);
 
     int isRunning = 1;
     gameState.isReady = 1;
@@ -194,26 +235,27 @@ int main(int argc, char *argv[]) {
 
         if (gameState.isReady){
             if (gameState.waitForServer){
-                struct GameState gameStateBuf;
-                printf("Wait for server\n");
+                struct gamestate gamestatebuf;
+                printf("wait for server\n");
 
                 ssize_t bytes = 0;
-                uint8_t *p = (uint8_t*)&gameStateBuf;
+                uint8_t *p = (uint8_t*)&gamestatebuf;
 
-                while (bytes < sizeof(gameStateBuf)) {
-                    ssize_t r = recv(s, p + bytes, sizeof(gameStateBuf) - bytes, 0);
+                while (bytes < sizeof(gamestatebuf)) {
+                    ssize_t r = recv(s, p + bytes, sizeof(gamestatebuf) - bytes, 0);
                     if (r <= 0) break;
                     bytes += r;
                 }
-                memcpy(&gameState, &gameStateBuf, sizeof(gameState));
+                memcpy(&gamestate, &gamestatebuf, sizeof(gamestate));
                 gameState.waitForServer = 0;
                 gameState.isReady = 0;
                 printf("Response from server\n");
             }
             else {
-                printf("> ");
-                fgets(buf, sizeof(buf), stdin);
-                send(s, buf, strlen(buf), 0);
+                //printf("> ");
+                //fgets(buf, sizeof(buf), stdin);
+                send(s, &gameState, sizeof(gameState), 0);
+                printf("Sent client data\n");
                 gameState.waitForServer = 1;
             }
         }
@@ -225,11 +267,15 @@ int main(int argc, char *argv[]) {
                         isRunning = 0;
                         break;
                     case SDL_EVENT_MOUSE_BUTTON_UP:
+                        printf("Clicked\n");
                         if (!SelectUnit(&gameState)) {
+                            printf("Movin unit\n");
                             MoveUnit(&gameState);
                         }
                 }
             }
+
+            commandCount = 0;
 
             GetPlayerInput(&windowEvent, &gameState, keys);
 
