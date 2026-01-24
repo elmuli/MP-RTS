@@ -11,6 +11,7 @@
 #define WIDHT 800
 #define HIGHT 600
 #define UNIT_COUNT 4
+#define TURN_MAX_COMMANDS 10
 
 #pragma pack(push, 1)
 
@@ -39,15 +40,16 @@ struct __attribute__((packed))GameState{
 };
 
 enum CommandType{
-    CMD_MOVE_UNIT
+    CMD_MOVE_UNIT,
+    CMD_END_TURN
 };
 
-struct Command{
-    CommandType type;
-    union data{
-        struct { int unitPosOnGrid; int newPosOnGrid; } move;
-    };
-};
+typedef struct{
+    enum CommandType type;
+    union{
+        struct{ uint8_t unitType; uint32_t oldPosOnGrid; uint32_t newPosOnGrid;} move;
+    } data;
+} Command;
 
 #pragma pack(pop)
 

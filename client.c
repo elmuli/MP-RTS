@@ -15,59 +15,31 @@
 struct GameState gameState;
 
 uint8_t ClientID;
-Command commands[10];
+Command commands[TURN_MAX_COMMANDS];
 int commandCount;
 
 SDL_Texture *tileTextures[4];
 SDL_FRect tileRect;
 
+void LoadTexture(SDL_Renderer *renderer, char *name, int index){
+    SDL_Surface *Surface = SDL_LoadBMP(name); 
+    if (!Surface) {
+        printf("Could not load %s: %s\n", name, SDL_GetError());
+        return;
+    }
+    tileTextures[index] = SDL_CreateTextureFromSurface(renderer, Surface);
+    if(!tileTextures[index]){
+        printf("Did not create %s texture: %s\n", name, SDL_GetError());
+    }
+    printf("Loaded %s\n", name);
+    SDL_DestroySurface(Surface);
+}
 
 void LoadMapTextures(SDL_Renderer *renderer){ 
-    SDL_Surface *Surface = SDL_LoadBMP("assets/GrassTile.bmp"); 
-    if (!Surface) {
-        printf("Could not load GrassTile img: %s\n", SDL_GetError());
-        return;
-    }
-    tileTextures[0] = SDL_CreateTextureFromSurface(renderer, Surface);
-    if(!tileTextures[0]){
-        printf("Did not create GrassTile texture: %s\n", SDL_GetError());
-    }
-    printf("Loaded Grass tile\n");
-
-    Surface = SDL_LoadBMP("assets/CastleTile.bmp");
-    if (!Surface) {
-        printf("Could not load CastleTile img: %s\n", SDL_GetError());
-        return;
-    }
-    tileTextures[1] = SDL_CreateTextureFromSurface(renderer, Surface);
-    if(!tileTextures[1]){
-        printf("Did not create CaslteTile texture: %s\n", SDL_GetError());
-    }
-    printf("Loaded Castle tile\n");
-
-    Surface = SDL_LoadBMP("assets/PlatoonTile.bmp");
-    if (!Surface) {
-        printf("Could not load PlatoonTile img: %s\n", SDL_GetError());
-        return;
-    }
-    tileTextures[2] = SDL_CreateTextureFromSurface(renderer, Surface);
-    if(!tileTextures[2]){
-        printf("Did not create PlatoonTile texture: %s\n", SDL_GetError());
-    }
-    printf("Loaded Platoon1 tile\n");
-
-    Surface = SDL_LoadBMP("assets/PlatoonTile2.bmp");
-    if (!Surface) {
-        printf("Could not load PlatoonTile img: %s\n", SDL_GetError());
-        return;
-    }
-    tileTextures[3] = SDL_CreateTextureFromSurface(renderer, Surface);
-    if(!tileTextures[3]){
-        printf("Did not create PlatoonTile2 texture: %s\n", SDL_GetError());
-    }
-    printf("Loaded Platoon2 tile\n");
-
-    SDL_DestroySurface(Surface);
+    LoadTexture(renderer, "assets/GrassTile.bmp", 0);
+    LoadTexture(renderer, "assets/CastleTile.bmp", 1);
+    LoadTexture(renderer, "assets/PlatoonTile.bmp", 2);
+    LoadTexture(renderer, "assets/PlatoonTile2.bmp", 3);
 }
 
 void DrawTileMap(struct GameState *gameState, SDL_Renderer *renderer){
@@ -116,15 +88,17 @@ int SelectUnit(struct GameState *gameState){
         return 0;
     }
 
+    printf("Continuing selection\n");
+
     for (int i=0;i<195;i++){
         if(gameState->unitMap.tileType[i] > 0){
             float tileY = i/gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxY;
             float tileX = i%gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxX;
 
             if(
-                mouseX > tileX 
-                && mouseX < tileX+gameState->tileMap.tilePxX 
-                && mouseY > tileY 
+                mouseX > tileX
+                && mouseX < tileX+gameState->tileMap.tilePxX
+                && mouseY > tileY
                 && mouseY < tileY+gameState->tileMap.tilePxY
             ){
                 for (int k=0;k<UNIT_COUNT;k++){
@@ -137,7 +111,7 @@ int SelectUnit(struct GameState *gameState){
             }
         }
     }
-
+    printf("Did not select unit\n");
     return 0;
 }
 
@@ -154,14 +128,27 @@ int MoveUnit(struct GameState *gameState){
         return 0;
     }
 
+    printf("Continuong moving\n");
+
     int tileY = mouseY / gameState->tileMap.tilePxY;
     int tileX = mouseX / gameState->tileMap.tilePxX;
 
+    printf("Continuong moving\n");
+
     int newIndex = tileY * gameState->tileMap.tilesAcross + tileX;
+    printf("oldindex %i\n", gameState->selectedUnit->posOnGrid);
+    int oldIndex = (int)gameState->selectedUnit->posOnGrid;
+    printf("Set indexes %i, %i\n", newIndex, oldIndex);
     gameState->unitMap.tileType[gameState->selectedUnit->posOnGrid] = 0;
     gameState->unitMap.tileType[newIndex] = gameState->selectedUnit->unitType;
     gameState->selectedUnit->posOnGrid = newIndex;
     printf("Moved a unit to %i\n", newIndex);
+
+    Command cmd = {.type = CMD_MOVE_UNIT,
+            .data.move = {.unitType = gameState->selectedUnit->unitType, .oldPosOnGrid = oldIndex, .newPosOnGrid = newIndex}};
+    commands[commandCount] = cmd;
+    commandCount++;
+
     return 1;
 }
 
@@ -221,10 +208,10 @@ int main(int argc, char *argv[]) {
     }
     printf("ClientID recieved %i\n", ClientID);
 
+    commandCount = 0;
     int isRunning = 1;
     gameState.isReady = 1;
     gameState.waitForServer = 1;
-    char buf[512];
 
     tileRect.h = 40.0f;
     tileRect.w = 40.0f;
@@ -235,7 +222,7 @@ int main(int argc, char *argv[]) {
 
         if (gameState.isReady){
             if (gameState.waitForServer){
-                struct gamestate gamestatebuf;
+                struct GameState gamestatebuf;
                 printf("wait for server\n");
 
                 ssize_t bytes = 0;
@@ -246,21 +233,23 @@ int main(int argc, char *argv[]) {
                     if (r <= 0) break;
                     bytes += r;
                 }
-                memcpy(&gamestate, &gamestatebuf, sizeof(gamestate));
+                memcpy(&gameState, &gamestatebuf, sizeof(gameState));
                 gameState.waitForServer = 0;
                 gameState.isReady = 0;
                 printf("Response from server\n");
             }
             else {
-                //printf("> ");
-                //fgets(buf, sizeof(buf), stdin);
-                send(s, &gameState, sizeof(gameState), 0);
+                for(int i=0;i<commandCount;i++){
+                    send(s, &commands[i], sizeof(Command), 0);
+                }
+                Command endCmd = {.type = CMD_END_TURN };
+                send(s, &endCmd, sizeof(Command), 0);
                 printf("Sent client data\n");
+                commandCount = 0;
                 gameState.waitForServer = 1;
             }
         }
         else {
-
             if (SDL_PollEvent(&windowEvent)) {
                 switch (windowEvent.type) {
                     case SDL_EVENT_QUIT:
@@ -268,14 +257,13 @@ int main(int argc, char *argv[]) {
                         break;
                     case SDL_EVENT_MOUSE_BUTTON_UP:
                         printf("Clicked\n");
-                        if (!SelectUnit(&gameState)) {
-                            printf("Movin unit\n");
-                            MoveUnit(&gameState);
+                        if (commandCount >= TURN_MAX_COMMANDS){
+                            continue;
+                        }else if (!SelectUnit(&gameState)) {
+                            if(MoveUnit(&gameState)) printf("Movin unit\n");
                         }
                 }
             }
-
-            commandCount = 0;
 
             GetPlayerInput(&windowEvent, &gameState, keys);
 

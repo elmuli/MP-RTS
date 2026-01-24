@@ -97,20 +97,33 @@ void SetUpGameState(struct GameState *gameState){
 
 int GetClientGameStateUpdate(int client, struct GameState *gameState){
 
-    struct gamestate gamestatebuf;
-    printf("wait for client %i\n", client);
+    for (int i=0;i<TURN_MAX_COMMANDS;i++){
+        Command cmd;
+        printf("wait for client %i\n", client);
 
-    ssize_t bytes = 0;
-    uint8_t *p = (uint8_t*)&gamestatebuf;
+        ssize_t bytes = 0;
+        uint8_t *p = (uint8_t*)&cmd;
 
-    while (bytes < sizeof(gamestatebuf)) {
-        ssize_t r = recv(client, p + bytes, sizeof(gamestatebuf) - bytes, 0);
-        if (r <= 0) break;
-        bytes += r;
+        while (bytes < sizeof(cmd)) {
+            ssize_t r = recv(client, p + bytes, sizeof(cmd) - bytes, 0);
+            if (r <= 0) break;
+            bytes += r;
+        }
+
+        switch (cmd.type) {
+            case CMD_END_TURN:
+                i = TURN_MAX_COMMANDS;
+                printf("Ended turn\n");
+                break;
+            case CMD_MOVE_UNIT:
+                printf("Moving unit to %i\n", cmd.data.move.newPosOnGrid);
+                gameState->unitMap.tileType[cmd.data.move.oldPosOnGrid] = 0;
+                gameState->unitMap.tileType[cmd.data.move.newPosOnGrid] = cmd.data.move.unitType;
+                break;
+        }
     }
 
-    
-
+    return 1;
 }
 
 int main(){
@@ -188,29 +201,15 @@ int main(){
 
     for(;;){
 
-        struct GameState newGameState;
+        printf("Getting client data\n");
 
-        int len;
-        printf("Reciving form client 1\n");
-        len = recv(clients[0], Data.data_2, sizeof(Data.data_2)-1, 0);
-        if (len <= 0) break;
-        Data.data_2[len] = 0;
-        printf("Received from client 1: %s\n", Data.data_2);
-
-        printf("Reciving form client 2\n");
-        len = recv(clients[1], Data.data_1, sizeof(Data.data_1)-1, 0);
-        if (len <= 0) break;
-        Data.data_1[len] = 0;
-        printf("Received from client 2: %s\n", Data.data_1);
-
-        newGameState.BG_red = 100;
-        newGameState.BG_blue = 100;
-        CreateTileMap(&newGameState);
+        GetClientGameStateUpdate(clients[0], &gameState);
+        GetClientGameStateUpdate(clients[1], &gameState);
 
         printf("Sending data to clients\n");
 
-        send(clients[0], &newGameState, sizeof(gameState), 0);
-        send(clients[1], &newGameState, sizeof(gameState), 0);
+        send(clients[0], &gameState, sizeof(gameState), 0);
+        send(clients[1], &gameState, sizeof(gameState), 0);
     }
 
     printf("Closing server\n");
