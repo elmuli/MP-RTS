@@ -90,6 +90,7 @@ void CreateUnitMap(struct GameState *gameState){
 void SetUpGameState(struct GameState *gameState){
     gameState->BG_red = 40;
     gameState->BG_blue = 40;
+    gameState->selectedUnit = NULL;
 
     CreateTileMap(gameState);
     CreateUnitMap(gameState);
@@ -106,7 +107,7 @@ int GetClientGameStateUpdate(int client, struct GameState *gameState){
 
         while (bytes < sizeof(cmd)) {
             ssize_t r = recv(client, p + bytes, sizeof(cmd) - bytes, 0);
-            if (r <= 0) break;
+            if (r <= 0) return -1;
             bytes += r;
         }
 
@@ -116,10 +117,20 @@ int GetClientGameStateUpdate(int client, struct GameState *gameState){
                 printf("Ended turn\n");
                 break;
             case CMD_MOVE_UNIT:
-                printf("Moving unit to %i\n", cmd.data.move.newPosOnGrid);
-                gameState->unitMap.tileType[cmd.data.move.oldPosOnGrid] = 0;
-                gameState->unitMap.tileType[cmd.data.move.newPosOnGrid] = cmd.data.move.unitType;
-                break;
+                if (cmd.data.move.newPosOnGrid > 193){
+                    break;
+                }else{
+                    printf("Moving unit to %i\n", cmd.data.move.newPosOnGrid);
+                    printf("Got data, oldPos: %i, newPos: %i, Type: %i\n", cmd.data.move.oldPosOnGrid, cmd.data.move.newPosOnGrid, cmd.data.move.unitType);
+                    gameState->unitMap.tileType[cmd.data.move.oldPosOnGrid] = 0;
+                    gameState->unitMap.tileType[cmd.data.move.newPosOnGrid] = 2;
+                    for (int k=0;k<UNIT_COUNT;k++){
+                        if (gameState->units[k].posOnGrid == cmd.data.move.oldPosOnGrid){
+                            gameState->units[k].posOnGrid = cmd.data.move.newPosOnGrid;
+                        }
+                    }
+                    break;
+                }
         }
     }
 
@@ -203,8 +214,12 @@ int main(){
 
         printf("Getting client data\n");
 
-        GetClientGameStateUpdate(clients[0], &gameState);
-        GetClientGameStateUpdate(clients[1], &gameState);
+        int clientReturn_1 = GetClientGameStateUpdate(clients[0], &gameState);
+        int clientReturn_2 = GetClientGameStateUpdate(clients[1], &gameState);
+
+        if (clientReturn_1 < 0 || clientReturn_2 < 0) {
+            break;
+        }
 
         printf("Sending data to clients\n");
 

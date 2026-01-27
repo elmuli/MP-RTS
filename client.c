@@ -66,8 +66,8 @@ void DrawTileMap(struct GameState *gameState, SDL_Renderer *renderer){
 void DrawUnits(struct GameState *gameState, SDL_Renderer *renderer){
     for (int i=0;i<UNIT_COUNT;i++){
 
-        float TileY = gameState->units[i].posOnGrid/gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxY;
-        float TileX = gameState->units[i].posOnGrid%gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxX;
+        float TileY = gameState->units[i].posOnGrid/gameState->unitMap.tilesAcross*(float)gameState->unitMap.tilePxY;
+        float TileX = gameState->units[i].posOnGrid%gameState->unitMap.tilesAcross*(float)gameState->unitMap.tilePxX;
 
         tileRect.x = TileX;
         tileRect.y = TileY;
@@ -79,73 +79,48 @@ void DrawUnits(struct GameState *gameState, SDL_Renderer *renderer){
     }
 }
 
-int SelectUnit(struct GameState *gameState){
-    float mouseX, mouseY;
-    SDL_GetMouseState(&mouseX, &mouseY);
-
-    if(mouseX > 600 || mouseY > 400){
-        printf("Clicked out of bounds\n");
-        return 0;
-    }
-
-    printf("Continuing selection\n");
-
-    for (int i=0;i<195;i++){
-        if(gameState->unitMap.tileType[i] > 0){
-            float tileY = i/gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxY;
-            float tileX = i%gameState->tileMap.tilesAcross*(float)gameState->tileMap.tilePxX;
-
-            if(
-                mouseX > tileX
-                && mouseX < tileX+gameState->tileMap.tilePxX
-                && mouseY > tileY
-                && mouseY < tileY+gameState->tileMap.tilePxY
-            ){
-                for (int k=0;k<UNIT_COUNT;k++){
-                    if(gameState->units[k].posOnGrid == i && gameState->units[k].ownerID == ClientID){
-                        gameState->selectedUnit = &gameState->units[k];
-                        printf("Selected a unit %i in %i\n", k, i);
-                        return 1;
-                    }
-                }
-            }
-        }
-    }
-    printf("Did not select unit\n");
-    return 0;
-}
-
-int MoveUnit(struct GameState *gameState){
-    if(gameState->selectedUnit == NULL){
-        return 0;
-    }
+int UnitActions(struct GameState *gameState){
 
     float mouseX, mouseY;
     SDL_GetMouseState(&mouseX, &mouseY);
 
-    if(mouseX > 600 || mouseY > 400){
+    if(mouseX > 600 || mouseY > 520){
         printf("Clicked out of bounds\n");
         return 0;
     }
 
-    printf("Continuong moving\n");
+    printf("Calculate index\n");
 
     int tileY = mouseY / gameState->tileMap.tilePxY;
     int tileX = mouseX / gameState->tileMap.tilePxX;
 
-    printf("Continuong moving\n");
+    int tileIndex = tileY * gameState->tileMap.tilesAcross + tileX;
 
-    int newIndex = tileY * gameState->tileMap.tilesAcross + tileX;
-    printf("oldindex %i\n", gameState->selectedUnit->posOnGrid);
-    int oldIndex = (int)gameState->selectedUnit->posOnGrid;
-    printf("Set indexes %i, %i\n", newIndex, oldIndex);
+    for (int k=0;k<UNIT_COUNT;k++){
+        if(gameState->units[k].posOnGrid == tileIndex && gameState->units[k].ownerID == ClientID){
+            gameState->selectedUnit = &gameState->units[k];
+            printf("Selected a unit %i in %i\n", k, tileIndex);
+            return 1;
+        }
+    }
+
+    if(tileIndex > 194){
+        printf("Too big index: %i\n", tileIndex);
+        return 0;
+    }
+
+    if(gameState->selectedUnit == NULL){
+        return 0;
+    }
+
+    int oldIndex = gameState->selectedUnit->posOnGrid;
     gameState->unitMap.tileType[gameState->selectedUnit->posOnGrid] = 0;
-    gameState->unitMap.tileType[newIndex] = gameState->selectedUnit->unitType;
-    gameState->selectedUnit->posOnGrid = newIndex;
-    printf("Moved a unit to %i\n", newIndex);
+    gameState->unitMap.tileType[tileIndex] = gameState->selectedUnit->unitType;
+    gameState->selectedUnit->posOnGrid = tileIndex;
+    printf("Moved a unit to %i\n", tileIndex);
 
     Command cmd = {.type = CMD_MOVE_UNIT,
-            .data.move = {.unitType = gameState->selectedUnit->unitType, .oldPosOnGrid = oldIndex, .newPosOnGrid = newIndex}};
+            .data.move = {.unitType = gameState->selectedUnit->unitType, .oldPosOnGrid = oldIndex, .newPosOnGrid = tileIndex}};
     commands[commandCount] = cmd;
     commandCount++;
 
@@ -256,11 +231,11 @@ int main(int argc, char *argv[]) {
                         isRunning = 0;
                         break;
                     case SDL_EVENT_MOUSE_BUTTON_UP:
-                        printf("Clicked\n");
+                        printf("Command count %i\n", commandCount);
                         if (commandCount >= TURN_MAX_COMMANDS){
                             continue;
-                        }else if (!SelectUnit(&gameState)) {
-                            if(MoveUnit(&gameState)) printf("Movin unit\n");
+                        }else{
+                            UnitActions(&gameState);
                         }
                 }
             }
