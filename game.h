@@ -21,12 +21,12 @@ struct TileMap {
   uint32_t tileType[195];
 };
 
-struct Unit{
+typedef struct{
     uint32_t posOnGrid;
     uint8_t unitType, ownerID;
     uint16_t health;
     uint16_t damage;
-};
+} Unit;
 
 struct __attribute__((packed))GameState{
     uint8_t BG_red;
@@ -35,12 +35,13 @@ struct __attribute__((packed))GameState{
     struct TileMap unitMap;
     uint8_t isReady;
     uint8_t waitForServer;
-    struct Unit units[UNIT_COUNT];
-    struct Unit *selectedUnit;
+    Unit units[UNIT_COUNT];
+    Unit *selectedUnit;
 };
 
 enum CommandType{
     CMD_MOVE_UNIT,
+    CMD_ATTACK,
     CMD_END_TURN
 };
 
@@ -48,6 +49,7 @@ typedef struct{
     enum CommandType type;
     union{
         struct{ uint8_t unitType; uint32_t oldPosOnGrid; uint32_t newPosOnGrid;} move;
+        struct{ uint8_t ownerID; uint32_t posOnGrid; uint16_t dealtDamage;} attack;
     } data;
 } Command;
 

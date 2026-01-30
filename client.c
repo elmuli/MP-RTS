@@ -21,6 +21,7 @@ int commandCount;
 SDL_Texture *tileTextures[4];
 SDL_FRect tileRect;
 
+
 void LoadTexture(SDL_Renderer *renderer, char *name, int index){
     SDL_Surface *Surface = SDL_LoadBMP(name); 
     if (!Surface) {
@@ -40,6 +41,19 @@ void LoadMapTextures(SDL_Renderer *renderer){
     LoadTexture(renderer, "assets/CastleTile.bmp", 1);
     LoadTexture(renderer, "assets/PlatoonTile.bmp", 2);
     LoadTexture(renderer, "assets/PlatoonTile2.bmp", 3);
+}
+
+int DistanceIndexIndex(int index_1, int index_2, struct GameState *gameState){
+    int indexPointY_1 = index_1/gameState->tileMap.tilesAcross*gameState->tileMap.tilePxY;
+    int indexPointX_1 = index_1%gameState->tileMap.tilesAcross*gameState->tileMap.tilePxY;
+
+    int indexPointY_2 = index_2/gameState->tileMap.tilesAcross*gameState->tileMap.tilePxY;
+    int indexPointX_2 = index_2%gameState->tileMap.tilesAcross*gameState->tileMap.tilePxY;
+
+    int x = abs(indexPointX_1-indexPointX_2);
+    int y = abs(indexPointY_1-indexPointY_2);
+
+    return x*x+y*y;
 }
 
 void DrawTileMap(struct GameState *gameState, SDL_Renderer *renderer){
@@ -65,6 +79,7 @@ void DrawTileMap(struct GameState *gameState, SDL_Renderer *renderer){
 
 void DrawUnits(struct GameState *gameState, SDL_Renderer *renderer){
     for (int i=0;i<UNIT_COUNT;i++){
+        if(gameState->units[i].posOnGrid == -1) continue;
 
         float TileY = gameState->units[i].posOnGrid/gameState->unitMap.tilesAcross*(float)gameState->unitMap.tilePxY;
         float TileX = gameState->units[i].posOnGrid%gameState->unitMap.tilesAcross*(float)gameState->unitMap.tilePxX;
@@ -101,6 +116,23 @@ int UnitActions(struct GameState *gameState){
             gameState->selectedUnit = &gameState->units[k];
             printf("Selected a unit %i in %i\n", k, tileIndex);
             return 1;
+        }else if(gameState->units[k].posOnGrid == tileIndex 
+                && gameState->units[k].ownerID != ClientID 
+                && gameState->selectedUnit != NULL
+        ){
+            int dist = DistanceIndexIndex(gameState->selectedUnit->posOnGrid, gameState->units[k].posOnGrid, gameState);
+            if (dist > 3200){
+                printf("Not in range\n");
+                return 0;
+            }
+            Command cmd = {.type = CMD_ATTACK,
+                    .data.attack = {.ownerID = gameState->units[k].ownerID, 
+                                  .posOnGrid = gameState->units[k].posOnGrid,
+                                  .dealtDamage = gameState->selectedUnit->damage}};
+            printf("Attacked a unit in %i\n", tileIndex);
+            commands[commandCount] = cmd;
+            commandCount++;
+            return 1;
         }
     }
 
@@ -113,18 +145,24 @@ int UnitActions(struct GameState *gameState){
         return 0;
     }
 
-    int oldIndex = gameState->selectedUnit->posOnGrid;
-    gameState->unitMap.tileType[gameState->selectedUnit->posOnGrid] = 0;
-    gameState->unitMap.tileType[tileIndex] = gameState->selectedUnit->unitType;
-    gameState->selectedUnit->posOnGrid = tileIndex;
-    printf("Moved a unit to %i\n", tileIndex);
+    int dist = DistanceIndexIndex(gameState->selectedUnit->posOnGrid, tileIndex, gameState);
+    if(dist < 12800){
+        int oldIndex = gameState->selectedUnit->posOnGrid;
+        gameState->unitMap.tileType[gameState->selectedUnit->posOnGrid] = 0;
+        gameState->unitMap.tileType[tileIndex] = gameState->selectedUnit->unitType;
+        gameState->selectedUnit->posOnGrid = tileIndex;
+        printf("Moved a unit to %i\n", tileIndex);
 
-    Command cmd = {.type = CMD_MOVE_UNIT,
-            .data.move = {.unitType = gameState->selectedUnit->unitType, .oldPosOnGrid = oldIndex, .newPosOnGrid = tileIndex}};
-    commands[commandCount] = cmd;
-    commandCount++;
+        Command cmd = {.type = CMD_MOVE_UNIT,
+                .data.move = {.unitType = gameState->selectedUnit->unitType, .oldPosOnGrid = oldIndex, .newPosOnGrid = tileIndex}};
+        commands[commandCount] = cmd;
+        commandCount++;
 
-    return 1;
+        return 1;
+    }else{
+        printf("Too far\n");
+        return 0;
+    }
 }
 
 void GetPlayerInput(SDL_Event *event, struct GameState *gameState, const bool *keys){
@@ -133,6 +171,30 @@ void GetPlayerInput(SDL_Event *event, struct GameState *gameState, const bool *k
     if (keys[SDL_SCANCODE_SPACE]) {
         gameState->isReady = 1;
     }
+}
+
+int DrawTextBox(SDL_Renderer *renderer, int posX, int posY, int width, int hight, const char *text){
+    SDL_FRect rect;
+
+    rect.x = posX;
+    rect.y = posY;
+    rect.w = width;
+    rect.h = hight;
+
+    SDL_SetRenderDrawColor(renderer, 70, 70, 70, 255);
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+
+    float scale = (hight-10)/7;
+    SDL_SetRenderScale(renderer, scale, scale);
+    SDL_RenderDebugText(renderer, (posX+5)/scale, (posY+5)/scale, text);
+    SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+    return 1;
+}
+
+int DrawUI(SDL_Renderer *renderer, struct GameState *gameState){
+    DrawTextBox(renderer, 10, 530, 250, 50, "$: 500");
+    DrawTextBox(renderer, 300, 530, 250, 50, "P: 50");
 }
 
 int main(int argc, char *argv[]) {
@@ -242,8 +304,11 @@ int main(int argc, char *argv[]) {
 
             GetPlayerInput(&windowEvent, &gameState, keys);
 
+            SDL_SetRenderScale(renderer, 1.0f, 1.0f);
             SDL_SetRenderDrawColor(renderer, gameState.BG_red, 40, gameState.BG_blue, 255);
             SDL_RenderClear(renderer);
+
+            DrawUI(renderer, &gameState);
 
             DrawTileMap(&gameState, renderer);
             DrawUnits(&gameState, renderer);

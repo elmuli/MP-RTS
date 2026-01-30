@@ -8,11 +8,6 @@
 
 #include "game.h"
 
-struct Data{
-    char data_1[512];
-    char data_2[512];
-};
-
 void CreateTileMap(struct GameState *gameState){
     
     gameState->tileMap.tilePxX = 40;
@@ -71,6 +66,8 @@ void CreateUnitMap(struct GameState *gameState){
             if (grid[i] == 2){
                 gameState->units[counter].posOnGrid = i;
                 gameState->units[counter].unitType = 2;
+                gameState->units[counter].health = 15;
+                gameState->units[counter].damage = 8;
                 if(counter%2 == 0){
                     gameState->units[counter].ownerID = 2;
                 }else{
@@ -96,6 +93,14 @@ void SetUpGameState(struct GameState *gameState){
     CreateUnitMap(gameState);
 }
 
+void ResetUnit(Unit *unit){
+    unit->posOnGrid = -1;
+    unit->unitType = -1;
+    unit->ownerID = -1;
+    unit->health = -1;
+    unit->damage = -1;
+}
+
 int GetClientGameStateUpdate(int client, struct GameState *gameState){
 
     for (int i=0;i<TURN_MAX_COMMANDS;i++){
@@ -115,6 +120,18 @@ int GetClientGameStateUpdate(int client, struct GameState *gameState){
             case CMD_END_TURN:
                 i = TURN_MAX_COMMANDS;
                 printf("Ended turn\n");
+                break;
+            case CMD_ATTACK:
+                for (int k=0;k<UNIT_COUNT;k++){
+                    if (gameState->units[k].posOnGrid == cmd.data.attack.posOnGrid && gameState->units[k].ownerID == cmd.data.attack.ownerID){
+                        gameState->units[k].health -= cmd.data.attack.dealtDamage;
+                        printf("Attacked unit in %i, having %i hp\n",gameState->units[k].posOnGrid, gameState->units[k].health);
+                        if(gameState->units[k].health >= 30000){
+                            gameState->unitMap.tileType[gameState->units[k].posOnGrid] = 0;
+                            ResetUnit(&gameState->units[k]);
+                        }
+                    }
+                }
                 break;
             case CMD_MOVE_UNIT:
                 if (cmd.data.move.newPosOnGrid > 193){
@@ -143,8 +160,6 @@ int main(){
 
     int server;
     int clients[2];
-
-    struct Data Data;
 
     socklen_t addrlen_1;
     socklen_t addrlen_2;
